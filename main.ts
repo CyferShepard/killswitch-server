@@ -19,6 +19,7 @@ router.get("/ping", (context) => {
   context.response.body = "Hello, world!";
 });
 
+app.use(router.routes(), router.allowedMethods());
 app.use(authRouter.routes(), authRouter.allowedMethods());
 app.use(servicesRouter.routes(), servicesRouter.allowedMethods());
 
