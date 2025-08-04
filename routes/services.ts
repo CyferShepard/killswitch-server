@@ -56,6 +56,12 @@ servicesRouter.put("/create", authMiddleware, async (context) => {
     return;
   }
 
+  if (grace_period < 60 * 60 * 1000) {
+    context.response.status = 400;
+    context.response.body = { error: "Grace period must be at least 1 hour" };
+    return;
+  }
+
   const key: string = V4.uuid();
 
   const user = new User("", "", true, context.state.user.userId);
@@ -84,6 +90,12 @@ servicesRouter.patch("/update", authMiddleware, async (context) => {
   if (!id) {
     context.response.status = 400;
     context.response.body = { error: "An ID is required" };
+    return;
+  }
+
+  if (grace_period && grace_period < 60 * 60 * 1000) {
+    context.response.status = 400;
+    context.response.body = { error: "Grace period must be at least 1 hour" };
     return;
   }
 
