@@ -15,6 +15,10 @@ app.use(
   })
 );
 
+router.get("/ping", (context) => {
+  context.response.body = "Hello, world!";
+});
+
 app.use(authRouter.routes(), authRouter.allowedMethods());
 app.use(servicesRouter.routes(), servicesRouter.allowedMethods());
 
