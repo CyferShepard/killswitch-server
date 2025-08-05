@@ -20,6 +20,13 @@ servicesRouter.get("/list", authMiddleware, async (context) => {
 
 servicesRouter.post("/validate", async (context) => {
   const { key } = await context.request.body.json();
+  const clientHeader = context.request.headers.get("Client");
+
+  if (!clientHeader) {
+    context.response.status = 400;
+    context.response.body = { error: "Invalid request" };
+    return;
+  }
 
   if (!key || !V4.isValid(key)) {
     context.response.status = 400;
@@ -40,9 +47,8 @@ servicesRouter.post("/validate", async (context) => {
     context.response.body = { error: "Service is inactive" };
     return;
   }
-  const clientHeader = context.request.headers.get("Client");
 
-  if (!clientHeader || clientHeader !== service.name) {
+  if (clientHeader !== service.name) {
     context.response.status = 403;
     context.response.body = { error: "Access Denied" };
     return;
