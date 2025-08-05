@@ -33,12 +33,13 @@ class DBSqLiteHandler {
     `);
 
     await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS access_logs (
+      CREATE TABLE IF NOT EXISTS request_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
-        serviceId INTEGER NOT NULL,
-        accessTime TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(id)
+        ip_address TEXT NOT NULL,
+        client TEXT,
+        valid INTEGER DEFAULT 1,
+        reason TEXT,
+        accessTime TEXT DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -129,6 +130,24 @@ class DBSqLiteHandler {
     }
   }
 
+  public async getRequestLogs(): Promise<any[]> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare("SELECT * FROM request_logs ORDER BY accessTime DESC");
+    const results = await stmt.all();
+
+    return results.map((result: Record<string, unknown>) => ({
+      id: result.id,
+      ip_address: result.ip_address,
+      client: result.client,
+      accessTime: result.accessTime,
+      valid: result.valid === 1,
+      reason: result.reason || null,
+    }));
+  }
+
   //insert
 
   public async insertUser(user: User) {
@@ -165,6 +184,22 @@ class DBSqLiteHandler {
       active: service.active ? 1 : 0,
       created_by: service.createdBy!.id,
     });
+  }
+
+  public async insertRequestLog(ipAddress: string, client: string | null, valid: boolean = true, reason?: string) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(
+      "INSERT INTO request_logs (ip_address, client, valid, reason) VALUES (:ip_address, :client,:valid, :reason)"
+    );
+    await stmt.run({ ip_address: ipAddress, client: client || null, valid: valid ? 1 : 0, reason: reason || null });
+    if (valid) {
+      console.info(`Request log inserted: IP:${ipAddress}, Client:${client}, Valid:${valid}`);
+    } else {
+      console.warn(`Request log inserted: IP:${ipAddress}, Client:${client}, Valid:${valid}, Reason:${reason}`);
+    }
   }
 
   //update

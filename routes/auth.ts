@@ -67,6 +67,7 @@ authRouter.post("/login", async (context) => {
   const forwarded = context.request.headers.get("x-forwarded-for");
   const ip = forwarded ? forwarded.split(",")[0].trim() : context.request.ip;
   console.log(`User ${user.username} logged in successfully. IP: ${ip}`);
+
   // await dbSqLiteHandler.insertToken(token, user);
 
   context.response.body = { accessToken, refreshToken };

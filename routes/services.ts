@@ -22,15 +22,20 @@ servicesRouter.post("/validate", async (context) => {
   const { key } = await context.request.body.json();
   const clientHeader = context.request.headers.get("Client");
 
+  const forwarded = context.request.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : context.request.ip;
+
   if (!clientHeader) {
     context.response.status = 400;
     context.response.body = { error: "Invalid request" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Client header is missing");
     return;
   }
 
   if (!key || !V4.isValid(key)) {
     context.response.status = 400;
     context.response.body = { error: "A valid serive key is required" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Invalid service key");
     return;
   }
 
@@ -39,23 +44,27 @@ servicesRouter.post("/validate", async (context) => {
   if (!service) {
     context.response.status = 404;
     context.response.body = { error: "Service not found" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Service not found");
     return;
   }
 
   if (service.active === false) {
     context.response.status = 403;
     context.response.body = { error: "Service is inactive" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Service is inactive");
     return;
   }
 
   if (clientHeader !== service.name) {
     context.response.status = 403;
     context.response.body = { error: "Access Denied" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader, false, "Client header does not match service name");
     return;
   }
 
   const expiryDate = new Date(Date.now() + (service.grace_period as number));
   service.grace_period = expiryDate;
+  await dbSqLiteHandler.insertRequestLog(ip, clientHeader, true);
 
   context.response.body = service;
 });
