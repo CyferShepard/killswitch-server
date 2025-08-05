@@ -40,6 +40,13 @@ servicesRouter.post("/validate", async (context) => {
     context.response.body = { error: "Service is inactive" };
     return;
   }
+  const clientHeader = context.request.headers.get("Client");
+
+  if (!clientHeader || clientHeader !== service.name) {
+    context.response.status = 403;
+    context.response.body = { error: "Access Denied" };
+    return;
+  }
 
   const expiryDate = new Date(Date.now() + (service.grace_period as number));
   service.grace_period = expiryDate;
