@@ -104,9 +104,12 @@ licensesRouter.post("/validate", async (context) => {
 
   const gracePeriodDate = new Date(Date.now() + (license.grace_period as number));
   license.grace_period = gracePeriodDate;
+
+  const licenseJson: { [key: string]: any } = license.toJSON();
+  licenseJson["client"] = service.client;
   await dbSqLiteHandler.insertRequestLog(ip, clientHeader, true);
 
-  context.response.body = license;
+  context.response.body = licenseJson;
 });
 
 licensesRouter.put("/create", authMiddleware, async (context) => {
