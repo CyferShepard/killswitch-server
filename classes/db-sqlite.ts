@@ -1,7 +1,9 @@
 import { Database } from "jsr:@db/sqlite@0.11";
 import { User } from "../models/users.ts";
-import { Service } from "./services.ts";
+import { Service } from "../models/services.ts";
 import { UUID } from "node:crypto";
+import { License } from "../models/licenses.ts";
+import { V4 } from "https://deno.land/x/uuid@v0.1.2/mod.ts";
 
 class DBSqLiteHandler {
   private db: Database | undefined;
@@ -22,13 +24,23 @@ class DBSqLiteHandler {
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS services (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      url TEXT,
       name TEXT UNIQUE NOT NULL,
-      key TEXT NOT NULL,
-      grace_period INTEGER NOT NULL DEFAULT '30 days',
+      client TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL
+
+      )
+    `);
+
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS licenses (
+      key TEXT PRIMARY KEY UNIQUE NOT NULL,
+      name TEXT UNIQUE NOT NULL,
+      service_id INTEGER NOT NULL,
+      grace_period INTEGER NOT NULL DEFAULT 86400000,
       active INTEGER DEFAULT 1,
-      created_by int NOT NULL,
-      FOREIGN KEY (created_by) REFERENCES users(id)
+      expiration_date TEXT NOT NULL DEFAULT (datetime('now', '+1 year')),
+      auto_renew INTEGER DEFAULT 1,
+      FOREIGN KEY (service_id) REFERENCES services(id)
       )
     `);
 
@@ -80,40 +92,30 @@ class DBSqLiteHandler {
     if (!this.db) {
       await this.initialize();
     }
-    const stmt = this.db!.prepare(`SELECT s.id, s.url, s.name, s.key, s.grace_period, s.active,
-        json_object('username',u.username,'password',u.password,'active',u.active ) created_by
-        FROM services s JOIN users u ON s.created_by = u.id`);
+    const stmt = this.db!.prepare(`SELECT * FROM services`);
     const results = await stmt.all();
-    return results.map((result: Record<string, unknown>) => ({
-      id: result.id,
-      url: result.url,
-      name: result.name,
-      key: result.key,
-      grace_period: typeof result.grace_period === "number" ? result.grace_period : parseInt(result.grace_period as string),
-      active: result.active === 1,
-      created_by: User.fromResult(result.created_by as Record<string, unknown>),
-    }));
-  }
-
-  public async getServiceByKey(key: UUID): Promise<Service | undefined> {
-    if (!this.db) {
-      await this.initialize();
-    }
-
-    const stmt = this.db!.prepare(`SELECT s.id, s.url, s.name, s.key, s.grace_period, s.active FROM services s WHERE key=:key`);
-    const result: Record<string, unknown> | undefined = await stmt.get({ key: key.toString() });
-
-    if (result) {
-      return Service.fromResult(result);
-    }
+    return results.map((result: Record<string, unknown>) => Service.fromResult(result));
   }
 
   public async getServiceByName(name: string): Promise<Service | undefined> {
     if (!this.db) {
       await this.initialize();
     }
-    const stmt = this.db!.prepare(`SELECT s.id, s.url, s.name, s.key, s.grace_period, s.active FROM services s WHERE name=:name`);
+    const stmt = this.db!.prepare(`SELECT * FROM services s WHERE name=:name`);
     const result: Record<string, unknown> | undefined = await stmt.get({ name: name });
+    if (result) {
+      return Service.fromResult(result);
+    }
+  }
+
+  public async getServiceByKey(key: UUID): Promise<Service | undefined> {
+    if (!this.db) {
+      await this.initialize();
+    }
+    const stmt = this.db!.prepare(
+      `SELECT s.* FROM services s join licenses l on l.service_id = s.id WHERE l.key=:key and l.active = 1`
+    );
+    const result: Record<string, unknown> | undefined = await stmt.get({ key: key.toString() });
     if (result) {
       return Service.fromResult(result);
     }
@@ -123,10 +125,45 @@ class DBSqLiteHandler {
     if (!this.db) {
       await this.initialize();
     }
-    const stmt = this.db!.prepare(`SELECT s.id, s.url, s.name, s.key, s.grace_period, s.active FROM services s WHERE id=:id`);
+    const stmt = this.db!.prepare(`SELECT s.* FROM services s WHERE id=:id`);
     const result: Record<string, unknown> | undefined = await stmt.get({ id: id });
     if (result) {
       return Service.fromResult(result);
+    }
+  }
+
+  public async getAllLicenses(): Promise<License[]> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(`SELECT * FROM licenses`);
+    const results = await stmt.all();
+
+    return results.map((result: Record<string, unknown>) => License.fromResult(result));
+  }
+
+  public async getLicenseByServiceId(service_id: number): Promise<License[]> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(`SELECT * FROM licenses WHERE service_id=:service_id`);
+    const result = await stmt.all({ service_id: service_id });
+
+    return result.map((result: Record<string, unknown>) => License.fromResult(result));
+  }
+
+  public async getLicenseByKey(key: UUID): Promise<License | undefined> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(`SELECT * FROM licenses WHERE key=:key`);
+    const result: Record<string, unknown> | undefined = await stmt.get({ key: key.toString() });
+
+    if (result) {
+      return License.fromResult(result);
     }
   }
 
@@ -164,25 +201,32 @@ class DBSqLiteHandler {
       await this.initialize();
     }
 
-    const stmt = this.db!.prepare(
-      "INSERT INTO services (url, name, key, grace_period, active, created_by) VALUES (:url, :name, :key, :grace_period, :active, :created_by)"
-    );
-    console.log("Inserting service:", service);
-    console.log("Service data:", {
-      url: service.url,
-      name: service.name,
-      key: service.key,
-      grace_period: service.grace_period,
-      active: service.active ? 1 : 0,
-      created_by: service.createdBy!.id,
-    });
+    const stmt = this.db!.prepare("INSERT INTO services (name, client, email) VALUES (:name, :client, :email)");
+
     await stmt.run({
-      url: service.url || null,
       name: service.name,
-      key: service.key,
-      grace_period: service.grace_period,
-      active: service.active ? 1 : 0,
-      created_by: service.createdBy!.id,
+      client: service.client,
+      email: service.email,
+    });
+  }
+
+  public async insertLicense(license: License) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(
+      "INSERT INTO licenses (key, name, service_id, grace_period, active, expiration_date, auto_renew) VALUES (:key, :name, :service_id, :grace_period, :active, :expiration_date, :auto_renew)"
+    );
+
+    await stmt.run({
+      key: V4.uuid(),
+      name: license.name,
+      service_id: license.service_id,
+      grace_period: license.grace_period,
+      active: license.active ? 1 : 0,
+      expiration_date: license.expiration_date,
+      auto_renew: license.auto_renew ? 1 : 0,
     });
   }
 
@@ -226,15 +270,32 @@ class DBSqLiteHandler {
       await this.initialize();
     }
 
-    const stmt = this.db!.prepare(
-      "UPDATE services SET url = :url, name = :name, grace_period = :grace_period, active = :active WHERE id = :id"
-    );
+    const stmt = this.db!.prepare("UPDATE services SET name = :name, client =:client , email = :email WHERE id = :id");
     await stmt.run({
       id: service.id,
-      url: service.url || null,
       name: service.name,
-      grace_period: service.grace_period,
-      active: service.active ? 1 : 0,
+      client: service.client,
+      email: service.email,
+    });
+  }
+
+  public async updateLicense(license: License) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(
+      "UPDATE licenses SET name = :name, service_id = :service_id, grace_period = :grace_period, active = :active, expiration_date = :expiration_date, auto_renew = :auto_renew WHERE key = :key"
+    );
+
+    await stmt.run({
+      key: license.key,
+      name: license.name,
+      service_id: license.service_id,
+      grace_period: license.grace_period,
+      active: license.active ? 1 : 0,
+      expiration_date: license.expiration_date,
+      auto_renew: license.auto_renew ? 1 : 0,
     });
   }
 }

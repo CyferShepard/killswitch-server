@@ -1,9 +1,7 @@
 import { Context, Router } from "https://deno.land/x/oak@v17.1.3/mod.ts";
 import { dbSqLiteHandler } from "../classes/db-sqlite.ts";
 import authMiddleware from "../utils/auth_middleware.ts";
-import { V4 } from "https://deno.land/x/uuid/mod.ts";
-import { Service } from "../classes/services.ts";
-import { User } from "../models/users.ts";
+import { Service } from "../models/services.ts";
 
 const servicesRouter = new Router({ prefix: "/services" });
 
@@ -18,81 +16,16 @@ servicesRouter.get("/list", authMiddleware, async (context) => {
   context.response.body = services;
 });
 
-servicesRouter.post("/validate", async (context) => {
-  const { key } = await context.request.body.json();
-  const clientHeader = context.request.headers.get("Client");
-
-  const forwarded = context.request.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0].trim() : context.request.ip;
-
-  if (!clientHeader) {
-    context.response.status = 400;
-    context.response.body = { error: "Invalid request" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Client header is missing");
-    return;
-  }
-
-  if (!key || !V4.isValid(key)) {
-    context.response.status = 400;
-    context.response.body = { error: "A valid serive key is required" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Invalid service key");
-    return;
-  }
-
-  const service = await dbSqLiteHandler.getServiceByKey(key);
-
-  if (!service) {
-    context.response.status = 404;
-    context.response.body = { error: "Service not found" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Service not found");
-    return;
-  }
-
-  if (service.active === false) {
-    context.response.status = 403;
-    context.response.body = { error: "Service is inactive" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Service is inactive");
-    return;
-  }
-
-  if (clientHeader !== service.name) {
-    context.response.status = 403;
-    context.response.body = { error: "Access Denied" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader, false, "Client header does not match service name");
-    return;
-  }
-
-  const expiryDate = new Date(Date.now() + (service.grace_period as number));
-  service.grace_period = expiryDate;
-  await dbSqLiteHandler.insertRequestLog(ip, clientHeader, true);
-
-  context.response.body = service;
-});
-
 servicesRouter.put("/create", authMiddleware, async (context) => {
-  const { url, grace_period = 24 * 60 * 60 * 1000, active = true, name } = await context.request.body.json();
+  const { client, name, email } = await context.request.body.json();
 
-  if (!name) {
+  if (!name || !client) {
     context.response.status = 400;
     context.response.body = { error: "All inputs are requred" };
     return;
   }
 
-  if (grace_period < 60 * 60 * 1000) {
-    context.response.status = 400;
-    context.response.body = { error: "Grace period must be at least 1 hour" };
-    return;
-  }
-
-  const key: string = V4.uuid();
-
-  const user = new User("", "", true, context.state.user.userId);
-  if (!user.id) {
-    context.response.status = 400;
-    context.response.body = { error: "User not found", state: context.state };
-    return;
-  }
-  const service = new Service(name, key, grace_period, active, user, url);
+  const service = new Service(name, client, email || "");
 
   const existingService = await dbSqLiteHandler.getServiceByName(name);
   if (existingService) {
@@ -107,17 +40,11 @@ servicesRouter.put("/create", authMiddleware, async (context) => {
 });
 
 servicesRouter.patch("/update", authMiddleware, async (context) => {
-  const { id, name, grace_period, active, url } = await context.request.body.json();
+  const { id, name, client, email } = await context.request.body.json();
 
   if (!id) {
     context.response.status = 400;
     context.response.body = { error: "An ID is required" };
-    return;
-  }
-
-  if (grace_period && grace_period < 60 * 60 * 1000) {
-    context.response.status = 400;
-    context.response.body = { error: "Grace period must be at least 1 hour" };
     return;
   }
 
@@ -129,12 +56,10 @@ servicesRouter.patch("/update", authMiddleware, async (context) => {
   }
 
   service = service.copyWith({
-    name: name ?? service.name,
-    key: service.key,
-    grace_period: grace_period ?? service.grace_period,
-    active: active ?? service.active,
-    url: url ?? service.url,
-    createdBy: service.createdBy,
+    id: id,
+    name: name || service.name,
+    client: client || service.client,
+    email: email || service.email,
   });
 
   await dbSqLiteHandler.updateService(service);
