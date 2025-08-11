@@ -2,6 +2,7 @@ import { Context, Router } from "https://deno.land/x/oak@v17.1.3/mod.ts";
 import { dbSqLiteHandler } from "../classes/db-sqlite.ts";
 import authMiddleware from "../utils/auth_middleware.ts";
 import { Service } from "../models/services.ts";
+import { licenseCacheInstance } from "./licenses.ts";
 
 const servicesRouter = new Router({ prefix: "/services" });
 
@@ -35,6 +36,7 @@ servicesRouter.put("/create", authMiddleware, async (context) => {
   }
 
   await dbSqLiteHandler.insertService(service);
+  await licenseCacheInstance.cacheServices();
 
   context.response.body = service;
 });
@@ -63,6 +65,7 @@ servicesRouter.patch("/update", authMiddleware, async (context) => {
   });
 
   await dbSqLiteHandler.updateService(service);
+  await licenseCacheInstance.cacheServices();
 
   context.response.body = service;
 });

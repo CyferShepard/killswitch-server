@@ -3,7 +3,7 @@ import { Application, Router } from "https://deno.land/x/oak@v17.1.3/mod.ts";
 import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
 import servicesRouter from "./routes/services.ts";
 import logRouter from "./routes/logs.ts";
-import licensesRouter from "./routes/licenses.ts";
+import licensesRouter, { licenseCacheInstance } from "./routes/licenses.ts";
 
 const app = new Application();
 const router = new Router();
@@ -26,6 +26,15 @@ app.use(authRouter.routes(), authRouter.allowedMethods());
 app.use(logRouter.routes(), logRouter.allowedMethods());
 app.use(licensesRouter.routes(), licensesRouter.allowedMethods());
 app.use(servicesRouter.routes(), servicesRouter.allowedMethods());
+
+console.log("Initializing database and caching licenses...");
+console.log("Caching services...");
+await licenseCacheInstance.cacheLicenses();
+console.log("Services Cached successfully.");
+console.log("Caching licenses...");
+await licenseCacheInstance.cacheServices();
+console.log("Licenses Cached successfully.");
+console.log("Database initialized and caches updated successfully.");
 
 const port = 8100;
 console.log(`Server is running on http://localhost:${port}`);

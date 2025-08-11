@@ -3,8 +3,27 @@ import { dbSqLiteHandler } from "../classes/db-sqlite.ts";
 import authMiddleware from "../utils/auth_middleware.ts";
 import { V4 } from "https://deno.land/x/uuid@v0.1.2/mod.ts";
 import { License } from "../models/licenses.ts";
+import { Service } from "../models/services.ts";
 
 const licensesRouter = new Router({ prefix: "/license" });
+
+let licenseCache: Array<License> = [];
+
+let serviceCache: Array<Service> = [];
+
+class LicenseCache {
+  public async cacheLicenses() {
+    const licenses = await dbSqLiteHandler.getAllLicenses();
+    licenseCache = licenses;
+  }
+
+  public async cacheServices() {
+    const services = await dbSqLiteHandler.getAllServices();
+    serviceCache = services;
+  }
+}
+
+export const licenseCacheInstance = new LicenseCache();
 
 licensesRouter.get("/list", authMiddleware, async (context) => {
   const service_id = context.request.url.searchParams.get("service_id");
@@ -41,10 +60,10 @@ licensesRouter.post("/validate", async (context) => {
 
   //input validation
 
-  if (!clientHeader) {
+  if (!clientHeader || serviceCache.map((s) => s.client).includes(clientHeader) === false) {
     context.response.status = 400;
     context.response.body = { error: "Invalid request" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Client header is missing");
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Client header is missing or is invalid");
     return;
   }
 
@@ -57,7 +76,8 @@ licensesRouter.post("/validate", async (context) => {
 
   //find license and service
 
-  const service = await dbSqLiteHandler.getServiceByKey(key);
+  const service = serviceCache.find((s) => s.client === clientHeader);
+  console.log("Service:", service);
 
   if (!service) {
     context.response.status = 404;
@@ -66,7 +86,7 @@ licensesRouter.post("/validate", async (context) => {
     return;
   }
 
-  const license = await dbSqLiteHandler.getLicenseByKey(key);
+  const license = licenseCache.find((l) => l.key === key);
 
   if (!license) {
     context.response.status = 404;
@@ -152,6 +172,7 @@ licensesRouter.put("/create", authMiddleware, async (context) => {
   const license = new License(key, name, service_id, grace_period, active, expiration_date.toISOString(), auto_renew);
 
   await dbSqLiteHandler.insertLicense(license);
+  await licenseCacheInstance.cacheLicenses();
 
   context.response.body = license;
 });
@@ -203,6 +224,7 @@ licensesRouter.patch("/update", authMiddleware, async (context) => {
   });
 
   await dbSqLiteHandler.updateLicense(updatedLicense);
+  await licenseCacheInstance.cacheLicenses();
 
   context.response.body = updatedLicense;
 });
