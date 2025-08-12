@@ -10,4 +10,20 @@ logRouter.get("/", authMiddleware, async (context) => {
   context.response.body = requestLogs;
 });
 
+logRouter.get("/stats", authMiddleware, async (context) => {
+  const days = context.request.url.searchParams.get("days") || "1";
+  const where: string = `WHERE accessTime >= datetime('now', '-${days} day') and endpoint not like '/logs%'`;
+  const requestLogs = await dbSqLiteHandler.getRequestLogsStats(where);
+
+  context.response.body = requestLogs;
+});
+logRouter.get("/statsByUniqueIP", authMiddleware, async (context) => {
+  const days = context.request.url.searchParams.get("days") || "1";
+  const where: string = `WHERE accessTime >= datetime('now', '-${days} day') and endpoint not like '/logs%'`;
+  const groupBy: string = "GROUP BY endpoint,ip_address";
+  const requestLogs = await dbSqLiteHandler.getRequestLogsStats(where, groupBy);
+
+  context.response.body = requestLogs;
+});
+
 export default logRouter;

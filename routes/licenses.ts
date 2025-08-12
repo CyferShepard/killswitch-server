@@ -77,7 +77,7 @@ licensesRouter.post("/validate", async (context) => {
   //find license and service
 
   const service = serviceCache.find((s) => s.client === clientHeader);
-  console.log("Service:", service);
+  // console.log("Service:", service);
 
   if (!service) {
     context.response.status = 404;
@@ -123,10 +123,12 @@ licensesRouter.post("/validate", async (context) => {
   }
 
   const gracePeriodDate = new Date(Date.now() + (license.grace_period as number));
-  license.grace_period = gracePeriodDate;
 
-  const licenseJson: { [key: string]: any } = license.toJSON();
-  licenseJson["client"] = service.client;
+  const licenseJson = {
+    ...license.toJSON(),
+    client: service.client,
+    grace_period: gracePeriodDate.toISOString(),
+  };
   await dbSqLiteHandler.insertRequestLog(ip, clientHeader, true);
 
   context.response.body = licenseJson;

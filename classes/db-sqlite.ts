@@ -51,6 +51,11 @@ class DBSqLiteHandler {
         client TEXT,
         valid INTEGER DEFAULT 1,
         reason TEXT,
+        url TEXT,
+        endpoint TEXT,
+        method TEXT,
+        headers TEXT,
+        body TEXT,
         accessTime TEXT DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -172,7 +177,7 @@ class DBSqLiteHandler {
       await this.initialize();
     }
 
-    const stmt = this.db!.prepare("SELECT * FROM request_logs ORDER BY accessTime DESC");
+    const stmt = this.db!.prepare(`SELECT * FROM request_logs ORDER BY accessTime DESC`);
     const results = await stmt.all();
 
     return results.map((result: Record<string, unknown>) => ({
@@ -182,6 +187,33 @@ class DBSqLiteHandler {
       accessTime: result.accessTime,
       valid: result.valid === 1,
       reason: result.reason || null,
+      url: result.url || null,
+      endpoint: result.endpoint || null,
+      method: result.method || null,
+      headers: result.headers ? JSON.parse(result.headers as string) : null,
+      body: result.body ? JSON.parse(result.body as string) : null,
+    }));
+  }
+
+  public async getRequestLogsStats(where?: string, groupBy?: string, orderBy?: string): Promise<any[]> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    groupBy = groupBy || "GROUP BY endpoint";
+    orderBy = orderBy || "ORDER BY accessTime DESC";
+
+    const stmt = this.db!.prepare(
+      `SELECT count(*) count, method, endpoint,accessTime,ip_address FROM request_logs ${where} ${groupBy} ${orderBy}`
+    );
+    const results = await stmt.all();
+
+    return results.map((result: Record<string, unknown>) => ({
+      count: result.count,
+      accessTime: result.accessTime,
+      endpoint: result.endpoint || null,
+      method: result.method || null,
+      ip_address: result.ip_address || null,
     }));
   }
 
@@ -230,20 +262,35 @@ class DBSqLiteHandler {
     });
   }
 
-  public async insertRequestLog(ipAddress: string, client: string | null, valid: boolean = true, reason?: string) {
+  public async insertRequestLog(
+    ipAddress: string,
+    client: string | null,
+    valid: boolean = true,
+    reason?: string,
+    url?: string,
+    endpoint?: string,
+    method?: string,
+    headers?: string,
+    body?: string
+  ) {
     if (!this.db) {
       await this.initialize();
     }
 
     const stmt = this.db!.prepare(
-      "INSERT INTO request_logs (ip_address, client, valid, reason) VALUES (:ip_address, :client,:valid, :reason)"
+      "INSERT INTO request_logs (ip_address, client, valid, reason, url,endpoint, method,headers, body) VALUES (:ip_address, :client,:valid, :reason, :url,:endpoint, :method, :headers, :body)"
     );
-    await stmt.run({ ip_address: ipAddress, client: client || null, valid: valid ? 1 : 0, reason: reason || null });
-    if (valid) {
-      console.info(`Request log inserted: IP:${ipAddress}, Client:${client}, Valid:${valid}`);
-    } else {
-      console.warn(`Request log inserted: IP:${ipAddress}, Client:${client}, Valid:${valid}, Reason:${reason}`);
-    }
+    await stmt.run({
+      ip_address: ipAddress,
+      client: client || null,
+      valid: valid ? 1 : 0,
+      reason: reason || null,
+      url: url || null,
+      endpoint: endpoint || null,
+      method: method || null,
+      headers: headers || null,
+      body: body || null,
+    });
   }
 
   //update
