@@ -45,6 +45,15 @@ class DBSqLiteHandler {
     `);
 
     await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS registered_licenses (
+      key TEXT PRIMARY KEY UNIQUE NOT NULL,
+      machineId TEXT NOT NULL,
+      machineName TEXT
+      registrationTime TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.db.exec(`
       CREATE TABLE IF NOT EXISTS request_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ip_address TEXT NOT NULL,
@@ -217,6 +226,17 @@ class DBSqLiteHandler {
     }));
   }
 
+  public async getRegisteredLicenseByKey(key: UUID): Promise<Record<string, unknown> | undefined> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(`SELECT * FROM registered_licenses WHERE key=:key`);
+    const result: Record<string, unknown> | undefined = await stmt.get({ key: key.toString() });
+
+    return result;
+  }
+
   //insert
 
   public async insertUser(user: User) {
@@ -293,6 +313,22 @@ class DBSqLiteHandler {
     });
   }
 
+  public async insertRegisteredLicense(key: UUID, machineId: string, machineName?: string) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(
+      "INSERT INTO registered_licenses (key, machineId, machineName) VALUES (:key, :machineId, :machineName)"
+    );
+
+    await stmt.run({
+      key: key.toString(),
+      machineId: machineId,
+      machineName: machineName || null,
+    });
+  }
+
   //update
   public async updateUser(user: User) {
     if (!this.db) {
@@ -343,6 +379,22 @@ class DBSqLiteHandler {
       active: license.active ? 1 : 0,
       expiration_date: license.expiration_date,
       auto_renew: license.auto_renew ? 1 : 0,
+    });
+  }
+
+  public async updateRegisteredLicense(key: UUID, machineId: string, machineName?: string) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare(
+      "UPDATE registered_licenses SET machineId = :machineId, machineName = :machineName WHERE key = :key"
+    );
+
+    await stmt.run({
+      key: key.toString(),
+      machineId: machineId,
+      machineName: machineName || null,
     });
   }
 }

@@ -52,18 +52,27 @@ licensesRouter.get("/list", authMiddleware, async (context) => {
 });
 
 licensesRouter.post("/validate", async (context) => {
-  const { key } = await context.request.body.json();
+  const { key, newDeviceId } = await context.request.body.json();
   const clientHeader = context.request.headers.get("Client");
+  const deviceHeader = context.request.headers.get("Device");
+  const machineNameHeader = context.request.headers.get("Machine-Name");
 
   const forwarded = context.request.headers.get("x-forwarded-for");
   const ip = forwarded ? forwarded.split(",")[0].trim() : context.request.ip;
 
   //input validation
 
-  if (!clientHeader || serviceCache.map((s) => s.client).includes(clientHeader) === false) {
+  if (!clientHeader || !deviceHeader || serviceCache.map((s) => s.client).includes(clientHeader) === false) {
     context.response.status = 400;
     context.response.body = { error: "Invalid request" };
-    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Client header is missing or is invalid");
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "Mssing required headers or invalid client");
+    return;
+  }
+
+  if (newDeviceId && newDeviceId != deviceHeader) {
+    context.response.status = 400;
+    context.response.body = { error: "Invalid request" };
+    await dbSqLiteHandler.insertRequestLog(ip, clientHeader || null, false, "New device ID does not match device header");
     return;
   }
 
@@ -122,11 +131,25 @@ licensesRouter.post("/validate", async (context) => {
     return;
   }
 
+  let registeredDevice = await dbSqLiteHandler.getRegisteredLicenseByKey(key);
+
+  if (!registeredDevice) {
+    await dbSqLiteHandler.insertRegisteredLicense(key, deviceHeader, machineNameHeader || undefined);
+    registeredDevice = await dbSqLiteHandler.getRegisteredLicenseByKey(key);
+  }
+
+  if (registeredDevice && registeredDevice.machineId != deviceHeader && newDeviceId) {
+    await dbSqLiteHandler.updateRegisteredLicense(key, newDeviceId, machineNameHeader || undefined);
+    registeredDevice = await dbSqLiteHandler.getRegisteredLicenseByKey(key);
+  }
+
   const gracePeriodDate = new Date(Date.now() + (license.grace_period as number));
 
   const licenseJson = {
     ...license.toJSON(),
     client: service.client,
+    registered_device: registeredDevice?.machineName || null,
+    isRegisteredDevice: registeredDevice && registeredDevice.machineId == deviceHeader ? true : false,
     grace_period: gracePeriodDate.toISOString(),
   };
   await dbSqLiteHandler.insertRequestLog(ip, clientHeader, true);
