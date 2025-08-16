@@ -43,10 +43,10 @@ licensesRouter.get("/list", authMiddleware, async (context) => {
 
   const licenses = await dbSqLiteHandler.getLicenseByServiceId(service.id!);
 
-  for (const license of licenses) {
-    const expiryDate = new Date(Date.now() + (license.grace_period as number));
-    license.grace_period = expiryDate;
-  }
+  // for (const license of licenses) {
+  //   const expiryDate = new Date(Date.now() + (license.grace_period as number));
+  //   license.grace_period = expiryDate;
+  // }
 
   context.response.body = licenses;
 });
