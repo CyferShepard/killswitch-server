@@ -181,12 +181,12 @@ class DBSqLiteHandler {
     }
   }
 
-  public async getRequestLogs(): Promise<any[]> {
+  public async getRequestLogs(where?: string): Promise<any[]> {
     if (!this.db) {
       await this.initialize();
     }
 
-    const stmt = this.db!.prepare(`SELECT * FROM request_logs ORDER BY accessTime DESC`);
+    const stmt = this.db!.prepare(`SELECT * FROM request_logs ${where}  ORDER BY accessTime DESC`);
     const results = await stmt.all();
 
     return results.map((result: Record<string, unknown>) => ({

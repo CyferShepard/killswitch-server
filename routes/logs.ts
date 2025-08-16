@@ -5,7 +5,10 @@ import authMiddleware from "../utils/auth_middleware.ts";
 const logRouter = new Router({ prefix: "/logs" });
 
 logRouter.get("/", authMiddleware, async (context) => {
-  const requestLogs = await dbSqLiteHandler.getRequestLogs();
+  const days = context.request.url.searchParams.get("days") || "1";
+  const where: string = `WHERE accessTime >= datetime('now', '-${days} day') and endpoint not like '/logs%'`;
+
+  const requestLogs = await dbSqLiteHandler.getRequestLogs(where);
 
   context.response.body = requestLogs;
 });
