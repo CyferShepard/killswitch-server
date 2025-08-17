@@ -194,7 +194,7 @@ licensesRouter.put("/create", authMiddleware, async (context) => {
 
   const key: string = V4.uuid();
 
-  const license = new License(key, name, service_id, grace_period, active, expiration_date.toISOString(), auto_renew);
+  const license = new License(key, name, service_id, grace_period, active, new Date(expiration_date).toISOString(), auto_renew);
 
   await dbSqLiteHandler.insertLicense(license);
   await licenseCacheInstance.cacheLicenses();
