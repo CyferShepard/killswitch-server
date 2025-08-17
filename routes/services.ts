@@ -70,4 +70,33 @@ servicesRouter.patch("/update", authMiddleware, async (context) => {
   context.response.body = service;
 });
 
+servicesRouter.delete("/delete", authMiddleware, async (context) => {
+  const { id } = await context.request.body.json();
+
+  if (!id) {
+    context.response.status = 400;
+    context.response.body = { error: "An ID is required" };
+    return;
+  }
+
+  const service = await dbSqLiteHandler.getServiceById(id);
+  if (!service) {
+    context.response.status = 404;
+    context.response.body = { error: "Service not found" };
+    return;
+  }
+
+  const licenses = await dbSqLiteHandler.getLicenseByServiceId(id);
+  if (licenses.length > 0) {
+    context.response.status = 400;
+    context.response.body = { error: "Cannot delete service with existing licenses" };
+    return;
+  }
+
+  await dbSqLiteHandler.deleteService(id);
+  await licenseCacheInstance.cacheServices();
+
+  context.response.body = { message: "Service deleted successfully" };
+});
+
 export default servicesRouter;

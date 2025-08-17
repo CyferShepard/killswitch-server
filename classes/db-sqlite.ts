@@ -397,6 +397,25 @@ class DBSqLiteHandler {
       machineName: machineName || null,
     });
   }
+
+  //delete
+  public async deleteService(id: number) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare("DELETE FROM services WHERE id = :id");
+    await stmt.run({ id: id });
+  }
+
+  public async deleteLicense(key: UUID) {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    const stmt = this.db!.prepare("DELETE FROM licenses WHERE key = :key");
+    await stmt.run({ key: key.toString() });
+  }
 }
 
 export const dbSqLiteHandler = new DBSqLiteHandler();

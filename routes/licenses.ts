@@ -254,4 +254,26 @@ licensesRouter.patch("/update", authMiddleware, async (context) => {
   context.response.body = updatedLicense;
 });
 
+licensesRouter.delete("/delete", authMiddleware, async (context) => {
+  const { key } = await context.request.body.json();
+
+  if (!key) {
+    context.response.status = 400;
+    context.response.body = { error: "A key is required" };
+    return;
+  }
+
+  const license = await dbSqLiteHandler.getLicenseByKey(key);
+  if (!license) {
+    context.response.status = 404;
+    context.response.body = { error: "License not found" };
+    return;
+  }
+
+  await dbSqLiteHandler.deleteLicense(key);
+  await licenseCacheInstance.cacheLicenses();
+
+  context.response.body = { message: "License deleted successfully" };
+});
+
 export default licensesRouter;
